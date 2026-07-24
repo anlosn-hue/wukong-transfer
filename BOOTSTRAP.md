@@ -89,7 +89,7 @@ powershell -Command "New-Item -ItemType Directory -Force _raw | Out-Null; Test-P
 - [ ] `CLAUDE.md`、`soul.md`、`WORKSPACE.md`、`AGENTS.md`、`README.md`、`BOOTSTRAP.md`、`data-manifest.md`、`声誉风险管理员初始提示词.md`
 - [ ] `.claude/skills/` 下恰好 12 个技能目录（与第 1 节表格一致），校验：`powershell -File scripts\skills_lint.ps1` 通过
 - [ ] `knowledge/INDEX.md`、`knowledge/log.md`、`knowledge/daily/`、`knowledge/cases/`、`knowledge/活动方案库/INDEX.md`
-- [ ] `knowledge/tools/` 下六个子目录：六维规则库、声誉风险事件库、投诉预警点、risk-checklist、管理机制、assessment-manual
+- [ ] `knowledge/tools/` 下五个子目录：六维规则库、声誉风险事件库、投诉预警点、管理机制、assessment-manual
 - [ ] `workflows/reputation-assessment/声誉风险评估-SOP.md`、`workflows/activity-review/活动评审-SOP.md`
 - [ ] `templates/活动卡片模板.md`、`templates/originals/`（有内容）
 - [ ] `scripts/skills_lint.ps1`、`scripts/diting_excel.py`、`scripts/test_diting_excel.py`

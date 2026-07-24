@@ -36,7 +36,7 @@ description: 筋斗云·文件统一处理。扫描 _raw/ 下的新材料：知�
 | 文件名特征 | 目标目录 |
 |-----------|---------|
 | 含：评估表、审核表、预案、申请表 | `templates/` |
-| 含：六维、分级、排查要点、方法论 | `knowledge/tools/assessment-manual/` 或 `risk-checklist/`（读内容决定） |
+| 含：六维、分级、排查要点、方法论 | `knowledge/tools/assessment-manual/` 或 `声誉风险事件库/`（读内容决定） |
 | 含：通知、发文、考评、制度 | `knowledge/tools/管理机制/` |
 | `.md` 文件 frontmatter 含 `scene:` 字段 | `knowledge/cases/` |
 | 含：经验、总结、模式、最佳实践、入门 | `internal-comms/` |
