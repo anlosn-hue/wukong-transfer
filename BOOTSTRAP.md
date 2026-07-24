@@ -43,6 +43,7 @@
 | pandoc（可选） | 部分文档转换路径的后备 | `pandoc --version` | 输出版本号；缺失不阻塞复建 |
 | playwright + chromium（仅红孩儿需要） | 小红书查询走浏览器 | `py -3.11 -m pip install playwright` 后 `py -3.11 -m playwright install chromium`，验证 `py -3.11 -m playwright --version` | 输出版本号；不用红孩儿可跳过 |
 | PowerShell | `scripts/skills_lint.ps1` 校验用（Windows 自带） | `powershell -Command "$PSVersionTable.PSVersion"` | 输出版本号 |
+| Node.js + npm docx 包 | 照妖镜/火眼金睛生成 Word 版报告用 | `node --version` 后 `npm ls -g docx`（未装则 `npm install -g docx`） | 各输出版本号 |
 
 ---
 
@@ -121,6 +122,7 @@ powershell -Command "Test-Path 'knowledge/tools/assessment-manual/private/处室
 - 原体系配套的**网站/服务器能力不随交**（源侧自建的舆情热榜聚合站、活动库同步对端等）。
 - **顺风耳降级口径**：SKILL 中的热榜聚合网站取数通道在本环境不可用，属预期行为；仅联网搜索（WebSearch 类能力）通道有效。技能内已附降级说明。
 - **红孩儿**：需用户自备小红书**监测小号**扫码登录后方可查询；未配置时技能应报告缺配置，而不是报错崩溃。纯观察者只读，绝不发布/点赞/评论/互动。
+- **技能文件中若引用 `docs/superpowers/specs|plans/...` 设计文档**：属源仓内部资料，不随交，遇到此类出处引用忽略即可，不影响技能执行。
 
 ---
 
@@ -213,4 +215,4 @@ powershell -Command "Test-Path 'knowledge/tools/assessment-manual/private/处室
 
 **红线自查（2 项）**
 - [ ] `git log --oneline --reverse | Select-Object -First 1` 最早一条提交为占位初始提交（orphan 全新历史，与任何其他仓无共同祖先）
-- [ ] 全仓搜索盘符前缀路径 0 命中：`powershell -Command "(Get-ChildItem -Recurse -File -Include *.md,*.py,*.ps1,*.txt,*.yaml,*.json | Select-String -Pattern 'D:\\' -SimpleMatch).Count"` 输出 `0`（技能与规范文件应全部使用仓内相对路径；命中即说明存在源侧绝对路径残留，报告移交人）
+- [ ] 全仓搜索盘符前缀路径 0 命中：`powershell -Command "(Get-ChildItem -Recurse -File -Include *.md,*.py,*.ps1,*.txt,*.yaml,*.json -Exclude BOOTSTRAP.md | Select-String -Pattern 'D:\\' -SimpleMatch).Count"` 输出 `0`（技能与规范文件应全部使用仓内相对路径；命中即说明存在源侧绝对路径残留，报告移交人。本文件因含此命令示例已被排除在扫描外）
