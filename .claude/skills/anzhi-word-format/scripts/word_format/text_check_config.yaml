@@ -1,0 +1,20 @@
+schema_version: 1
+
+built_in:
+  fix_date_padding: true
+  fix_bullet_chars: true
+  fix_zhizhi: true
+  fix_quotes: true
+  fix_quote_direction: true
+  fix_list: true
+
+custom_fixes: []
+
+leader_check:
+  enabled: false
+  ai_typo_check: false
+  leaders: []
+
+org_check:
+  enabled: false
+  orgs: []

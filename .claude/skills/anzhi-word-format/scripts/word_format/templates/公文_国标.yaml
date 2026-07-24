@@ -1,0 +1,58 @@
+schema_version: 1
+name: 公文_国标
+description: GB/T 9704-2012 党政机关公文格式国家标准
+
+page:
+  page_width_cm: 21.0
+  page_height_cm: 29.7
+  margin_top_cm: 3.7
+  margin_bottom_cm: 3.5
+  margin_left_cm: 2.8
+  margin_right_cm: 2.6
+  header_dist_cm: 1.5
+  footer_dist_cm: 2.8
+  grid_font: 仿宋
+  grid_font_pt: 16
+  chars_per_line: 28
+  line_pitch_pt: 28.95
+  page_number:
+    mode: official
+    font: 仿宋
+    size_pt: 12
+    align: center
+
+body:
+  main_title:
+    font: 方正小标宋简体
+    size_pt: 22
+  sub_title:
+    font: 仿宋
+    size_pt: 16
+  headings:
+    - level: 1
+      pattern: "^[一二三四五六七八九十百千]+、"
+      font: 黑体
+      size_pt: 16
+      bold: false
+    - level: 2
+      pattern: "^（[一二三四五六七八九十百千]+）"
+      font: 楷体
+      size_pt: 16
+      bold: false
+    - level: 3
+      pattern: '^([１２３４５６７８９０]+．|[0-9]+\.(?![0-9]))'
+      font: 仿宋
+      size_pt: 16
+      bold: false
+    - level: 4
+      pattern: "^（[1-9][0-9]*）"
+      font: 仿宋
+      size_pt: 16
+      bold: false
+  body:
+    font: 仿宋
+    size_pt: 16
+  table:
+    font: 仿宋
+    size_pt: 14
+    line_spacing_pt: 20.0

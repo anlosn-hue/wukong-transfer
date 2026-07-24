@@ -1,0 +1,12 @@
+# 数据落位目录——内容来自离线包，不进 git
+work/*
+internal-comms/*
+knowledge-raw/*
+templates/originals/*
+knowledge/tools/assessment-manual/private/*
+!**/.gitkeep
+# 离线包产出
+release-data/
+# 本地运行时
+.env
+__pycache__/

@@ -1,0 +1,5 @@
+# 红孩儿运行时依赖（首次使用/换机器时装）
+# 安装：pip install -r requirements.txt && python -m playwright install chromium
+playwright
+beautifulsoup4
+pyyaml

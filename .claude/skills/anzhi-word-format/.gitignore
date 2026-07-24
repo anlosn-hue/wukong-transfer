@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+scripts/word_format/input/
+scripts/word_format/output/
+scripts/word_format/history/
