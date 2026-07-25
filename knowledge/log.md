@@ -9,6 +9,10 @@
 
 ---
 
+## [2026-07-24] update | 自维护机制 P1 落地：index_lint.ps1 四项机械体检上线+首跑订正 4 红
+
+`scripts/index_lint.ps1`（PS 5.1，配套 `scripts/tests/index_lint.tests.ps1` 21 组用例）建成上线，走 writing-plans 计划+sonnet 子代理逐任务 TDD 实现+主会话逐任务复核，实施前经 Fable 自查（2 处）＋Kimi 0.23.4 独立评审（10 条，采纳 8）双评审。四项检查：①INDEX 双向核对（cases/活动方案库/六维规则库 死链+隐身，总览只查死链）②活动库状态 vs 时间窗矛盾+INDEX↔卡片一致性+状态枚举+畸形行 ③assessment_path↔work/ 双向 ④海马体五类出口结构+backlog 到期日扫描。触发：会话结束检查点（work/knowledge 有新增文件）+月度健检全量，CLAUDE.md 三处"脚本上线前"豁免句已摘。**真库首跑逮 4 红全订正**：电子签名停服状态漏翻（待上线→已结束，卡+INDEX，青云已手动同步 17 条）、18理财日卡 assessment_path 直引号≠目录弯引号、财富新客礼遇路径被正则误截（回滚全角括号排除，实证目录名优先）、海马体条目未转义竖线劈坏表格。另：knowledge/INDEX.md 案例库副本表撤销改指针（撤销时已漏登 2 case，副本必然漂移再证）、活动方案库 INDEX 头部状态枚举自述三值补全为五值（对齐模板）。计划与双评审记录：`docs/superpowers/plans/2026-07-24-index-lint.md`。
+
 ## [2026-07-24] reorg+update | 自维护机制 P0 落地：05 四维修复+定级判例节、活动库 5 状态订正、记忆层重构
 
 按 `docs/superpowers/specs/2026-07-24-自维护机制-design.md`（安之九问拷问+索引零补建复核+技能联动复核+Kimi 独立评审十条裁定后定稿）执行 P0：
