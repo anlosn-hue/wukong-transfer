@@ -15,7 +15,7 @@
 | `AGENTS.md` | Codex、Kimi Code 等（各自自动加载） | 启动读取清单 + 平台差异与替代做法 |
 | `WORKSPACE.md` | 所有 agent | 多 agent 协作约定 + 技能发现协议（本文件） |
 | `soul.md` | 所有 agent | 人格与工作原则 |
-| `memory/海马体.md`、`knowledge/*` | 所有 agent | 纯 Markdown 状态文件与知识库，任何 agent 均可读写 |
+| `memory/海马体.md`、`memory/backlog.md`、`knowledge/*` | 所有 agent | 纯 Markdown 状态文件与知识库，任何 agent 均可读写（海马体＝有出口的短期暂存；backlog＝长期挂账，不进启动必读、健检扫其到期日） |
 | `workflows/*/‥-SOP.md` | 所有 agent | 评估/评审 SOP，本身就是平台中立的文字流程 |
 | `BOOTSTRAP.md`、`data-manifest.md` | 复建阶段的 AI | 复建指南与离线包落位说明，日常使用无需重读 |
 
@@ -85,7 +85,7 @@
 
 ## 四、记忆、状态与并发
 
-- `memory/海马体.md`、`knowledge/log.md` 等为共享状态文件，所有 agent 按 `CLAUDE.md` 的规则读写（对 knowledge/ 的实质操作必须在 `knowledge/log.md` 记一条，**新条目插在文件顶部**、按日期降序，勿追加到文件末尾）。
+- `memory/海马体.md`、`memory/backlog.md`、`knowledge/log.md` 等为共享状态文件，所有 agent 按 `CLAUDE.md` 的规则读写（对 knowledge/ 的实质操作必须在 `knowledge/log.md` 记一条，**新条目插在文件顶部**、按日期降序，勿追加到文件末尾）。
 - 平台自带持久记忆可自行使用，但**业务记忆以 `memory/海马体.md` 为准**，平台私有记忆不得替代它。
 - **并发约定**：允许多个 agent 同时打开本工作台，但同一时间只允许一个 agent 编辑同一个状态文件；多 agent 同开时先向用户声明分工；发现他人未收尾的半成品编辑（冲突标记、残缺表格）先停手报告用户，不覆盖。
 
