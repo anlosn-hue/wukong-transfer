@@ -345,7 +345,7 @@ py -3.11 -m word_format.word_format_tool --template 公文_本单位 --format-ta
 **④ 检查新隐患**
 
 检查 Phase 2 中是否有 `[🆕新隐患]` 标记：
-- 有 → 提示：「发现 X 个新隐患，建议追加到 cases/ 或事件库，是否现在处理？」
+- 有 → 提示：「发现 X 个新隐患，建议追加到 cases/ 或事件库，是否现在处理？」（写入 cases/ 的**同时在 `cases/INDEX.md` 登记一行**，不登记等于对技能不存在）
 - 无 → 用 Glob 扫描 `knowledge/cases/`，检查同场景案例数，≥2条时提示考虑提炼 internal-comms/
 
 **Step 4.3 之前，先执行 Phase 5（不可跳过判断，即使不入库也须显式判断并告知结果）**

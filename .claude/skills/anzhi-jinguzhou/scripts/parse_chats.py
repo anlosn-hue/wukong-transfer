@@ -19,8 +19,10 @@ from pathlib import Path
 import pandas as pd
 
 # 发言人非贪婪匹配到第一个「空格+时分秒+全角冒号」为止；内容可跨行（re.S）
+# 时间戳容忍脱敏残缺（如 :48:01 / 11::27 / 15:43:）：2-8 位数字与冒号组合，
+# 顺序以 @@@ 分段为准，时间本身不参与判定（2026-07-24 脱敏样例驱动放宽）
 MSG_RE = re.compile(
-    r'^(?P<speaker>.+?)\s+(?P<time>\d{1,2}:\d{2}:\d{2})：\s*(?P<content>.*)$', re.S)
+    r'^(?P<speaker>.+?)\s+(?P<time>[\d:]{2,8})：\s*(?P<content>.*)$', re.S)
 
 
 def say(msg: str):
