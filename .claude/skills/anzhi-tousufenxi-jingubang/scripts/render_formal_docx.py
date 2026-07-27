@@ -93,8 +93,19 @@ def _render_table_md(doc, table_md, ctx=None):
         if not table_lines or len(table_lines) < 2:
             if block.strip().startswith("###"):
                 doc.add_heading(block.strip().lstrip("#").strip(), level=2)
-            elif block.strip():
-                _write(doc, block.strip(), ctx)
+            elif any(l.strip().startswith("- ") for l in lines):
+                # markdown 列表逐条成段：整块直写会把多条挤成一段，还把 '-' 原样印进公文
+                for l in lines:
+                    s = l.strip()
+                    if s.startswith("- "):
+                        _write(doc, s[2:].strip(), ctx, style="List Bullet")
+                    elif s:
+                        _write(doc, s, ctx)
+            else:
+                # 多行普通文本逐行成段：整块直写会把几段挤成一段（叙述字段常见）
+                for l in lines:
+                    if l.strip():
+                        _write(doc, l.strip(), ctx)
             continue
         rows = [table_lines[0]] + table_lines[2:]  # 第2行固定是 |---|---| 分隔行，跳过它，不做字符集判断
         # 表格单元格内不落脚注（Word 表内脚注排版不稳），标记直接去掉
@@ -178,11 +189,14 @@ def run(report_dir, config):
     for line in narrative.get("结论摘要", []):
         _write(doc, line, ctx)
 
-    outline = report_outline.build_outline(metrics, summaries, narrative)
-    for sec in outline:
+    outline, appendix = report_outline.split_appendix(
+        report_outline.build_outline(metrics, summaries, narrative))
+
+    def emit(sec):
         doc.add_heading(f"{next(no)}、{sec['title']}", level=1)
         if sec["narrative"]:
-            _write(doc, sec["narrative"], ctx)
+            # 与 html 对齐：叙述支持分段/分点/加粗，不再当成单个段落
+            _render_table_md(doc, sec["narrative"], ctx)
         if sec["insight"]:
             _add_callout(doc, "■ 数据洞察", fn.strip_markers(sec["insight"]), BLUE, BLUE, "EEF4FB")
         if sec["risk"]:
@@ -192,10 +206,16 @@ def run(report_dir, config):
             _render_chart(doc, sec["chart"])
         _render_note(doc, sec.get("note"))
 
+    for sec in outline:
+        emit(sec)
+
     doc.add_heading(f"{next(no)}、策略建议", level=1)
     for s in narrative.get("策略建议", []):
         p = doc.add_paragraph(); r = p.add_run(s["标题"]); r.font.bold = True; r.font.color.rgb = BLUE
         _write(doc, s["内容"], ctx)
+
+    for sec in appendix:       # 附件清单固定排最后（用户 2026-07-25）
+        emit(sec)
 
     footer = doc.add_paragraph()
     footer.alignment = WD_ALIGN_PARAGRAPH.CENTER

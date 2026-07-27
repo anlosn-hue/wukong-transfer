@@ -85,3 +85,74 @@ def test_run_writes_csv_idempotent(sample_xlsx, dept_map_file, tmp_path):
     meta = json.loads((base / "底库" / "_meta.json").read_text(encoding="utf-8"))
     assert meta["duban"]["2026-05"]["条数"] == 6
     assert meta["未映射主办单位"] == []  # 夹具单位全在映射表内
+
+
+# ---- 跨表二级菜单归一（2026-07-25 新增）----
+# 由 2026-06 报告红警漏报引出：督办表「借记卡增值服务积点权益问题」与投诉表
+# 「借记卡增值权益服务问题」是同一业务概念，各自"原样取"会让 m04 按拼接字符串
+# 跨表精确匹配时静默失效，漏掉一个红色预警。
+
+def test_load_menu_map_missing_returns_empty(tmp_path):
+    assert normalize.load_menu_map(tmp_path / "不存在.yaml") == {}
+
+def test_load_menu_map_reads_second_level(tmp_path):
+    p = tmp_path / "菜单映射.yaml"
+    p.write_text("二级菜单:\n  借记卡增值服务积点权益问题: 借记卡增值权益服务问题\n", encoding="utf-8")
+    assert normalize.load_menu_map(p) == {"借记卡增值服务积点权益问题": "借记卡增值权益服务问题"}
+
+def _duban_df(二级):
+    return pd.DataFrame([
+        ["2026-06-01 10:00", "兴业银行总行数字运营部", "95561", "数字运营部",
+         二级, "积点权益供应商服务问题", "内容", "结果", "否", "0"],
+    ], columns=["受理时间","主办单位","意见来源","业务细分一级菜单","业务细分二级菜单",
+                "业务细分三级菜单","客户反馈内容","主办机构处理结果","是否超时办结","超时天数"])
+
+def test_clean_normalizes_second_level_menu(dept_map_file):
+    dept_map = normalize.load_dept_map(dept_map_file / "部门映射.yaml")
+    menu_map = {"借记卡增值服务积点权益问题": "借记卡增值权益服务问题"}
+    out, _ = normalize.clean(_duban_df("借记卡增值服务积点权益问题"), "duban", dept_map, menu_map)
+    # 归一后两表拼出同一个「问题点」，m04 才匹配得上
+    assert out["二级菜单"].iloc[0] == "借记卡增值权益服务问题"
+    assert out["问题点"].iloc[0] == "借记卡增值权益服务问题-积点权益供应商服务问题"
+
+def test_clean_without_menu_map_keeps_original(dept_map_file):
+    # 回归：不传 menu_map 时行为与改造前完全一致
+    dept_map = normalize.load_dept_map(dept_map_file / "部门映射.yaml")
+    out, _ = normalize.clean(_duban_df("借记卡增值服务积点权益问题"), "duban", dept_map)
+    assert out["问题点"].iloc[0] == "借记卡增值服务积点权益问题-积点权益供应商服务问题"
+
+def test_clean_menu_map_leaves_unlisted_names_untouched(dept_map_file):
+    dept_map = normalize.load_dept_map(dept_map_file / "部门映射.yaml")
+    menu_map = {"借记卡增值服务积点权益问题": "借记卡增值权益服务问题"}
+    out, _ = normalize.clean(_duban_df("短信问题"), "duban", dept_map, menu_map)
+    assert out["问题点"].iloc[0] == "短信问题-积点权益供应商服务问题"
+
+def test_run_reports_menu_normalization_and_ignores_unlisted(sample_xlsx, dept_map_file):
+    """run() 须记录本批实际用到的映射供报告披露；且遇到映射表里没有的二级菜单不得抛错。
+
+    回归：初版实现先构造 f"{v} → {menu_map[v]}" 再判断 v in menu_map，
+    真实数据一跑就 KeyError（映射表只有 1 条，数据里有上百种二级菜单）。
+    """
+    base = sample_xlsx.parent
+    (base / "底库").mkdir(exist_ok=True)
+    (base / "底库" / "菜单映射.yaml").write_text(
+        "二级菜单:\n  短信问题: 短信类问题\n", encoding="utf-8")
+    summary = normalize.run(base)
+    assert summary["菜单归一"] == ["短信问题 → 短信类问题"]  # 命中的记一条
+    d = pd.read_csv(base / "底库" / "duban" / "2026-05.csv", encoding="utf-8-sig")
+    assert d["问题点"].iloc[0] == "短信类问题-短信屏蔽"
+    # 投诉侧「协商还款问题」不在映射表里 → 原样保留，且不抛错
+    t = pd.read_csv(base / "底库" / "tousu" / "2026-05.csv", encoding="utf-8-sig")
+    assert t["问题点"].iloc[0] == "协商还款问题-逾期无力归还"
+
+def test_run_persists_menu_normalization_to_meta(sample_xlsx, dept_map_file):
+    """菜单归一记录须落 _meta.json——报告「报告说明」章要披露映射关系（规范 A8a），
+    而渲染发生在 run_analysis 阶段，拿不到 normalize.run() 的返回值。"""
+    import json
+    base = sample_xlsx.parent
+    (base / "底库").mkdir(exist_ok=True)
+    (base / "底库" / "菜单映射.yaml").write_text(
+        "二级菜单:\n  短信问题: 短信类问题\n", encoding="utf-8")
+    normalize.run(base)
+    meta = json.loads((base / "底库" / "_meta.json").read_text(encoding="utf-8"))
+    assert meta["菜单归一"] == ["短信问题 → 短信类问题"]

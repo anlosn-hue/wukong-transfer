@@ -15,7 +15,19 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Pt
 
-from marker_utils import split_markers, strip_markers  # noqa: F401（转出口，渲染器从这里取）
+from marker_utils import strip_tips
+from marker_utils import split_markers as _split_markers
+from marker_utils import strip_markers as _strip_markers
+
+
+# 转出口（渲染器从这里取）。docx 侧一律**连带剥掉悬浮标记**：Word 没有悬停形态，
+# 明细另作附件；不剥的话正式公文里会直接漏出「〔tip:...〕」源码。
+def strip_markers(text):
+    return strip_tips(_strip_markers(text))
+
+
+def split_markers(text):
+    return [(strip_tips(chunk), key) for chunk, key in _split_markers(text)]
 
 CT_FOOTNOTES = ("application/vnd.openxmlformats-officedocument"
                 ".wordprocessingml.footnotes+xml")
@@ -89,10 +101,14 @@ def add_text_with_footnotes(doc, text, fnmgr, notes, style=None):
     p = doc.add_paragraph(style=style) if style else doc.add_paragraph()
     for chunk, key in split_markers(text):
         if chunk:
-            # markdown 的 **加粗** 在 docx 里要落成 bold run，否则星号会原样印进正式报告
-            for i, seg in enumerate(chunk.split("**")):
-                if seg:
-                    p.add_run(seg).bold = bool(i % 2)
+            # markdown 的 **加粗** 在 docx 里要落成 bold run，否则星号会原样印进正式报告。
+            # 落单的 ** 按字面处理——否则后半段会被整段加粗（同 html 侧 _escape_bold）
+            if chunk.count("**") % 2:
+                p.add_run(chunk)
+            else:
+                for i, seg in enumerate(chunk.split("**")):
+                    if seg:
+                        p.add_run(seg).bold = bool(i % 2)
         if key is not None:
             note = notes.get(key)
             if note:

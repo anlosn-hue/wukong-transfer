@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import re
+
 import report_outline
 
 METRICS = {
@@ -95,9 +97,9 @@ def test_mom_yoy_and_newcomers_zero_result_branches():
     outline = report_outline.build_outline(metrics, SUMMARIES, NARRATIVE)
     tousu, duban = outline[0], outline[1]
     assert "投诉侧本月无环比超标上升或骤降项" in tousu["table_md"]
-    assert "投诉侧本月无新面孔问题点" in tousu["table_md"]
+    assert "投诉侧本月无新面孔诉点" in tousu["table_md"]
     assert "督办侧本月无环比超标上升或骤降项" in duban["table_md"]
-    assert "督办侧本月无新面孔问题点" in duban["table_md"]
+    assert "督办侧本月无新面孔问题" in duban["table_md"]
 
 def test_duban_chart_handles_dash_overtime_rate():
     metrics = {"模型": dict(METRICS["模型"])}
@@ -108,3 +110,58 @@ def test_duban_chart_handles_dash_overtime_rate():
     outline = report_outline.build_outline(metrics, SUMMARIES, NARRATIVE)
     duban = outline[1]
     assert duban["chart"]["series"]["超时办结率(%)"] == [0.0, 12.5]
+
+
+# ---- 环比明细：正文只留 TopN、按变幅降序、其余指向附件（规范 D8，批注5/6）----
+# 2026-06 首版建了附件却没撤正文长表，结果正文 69+38 行与附件内容重复，
+# 且洞察里写着"明细见附件一"而表就杵在那句话上面，说明与实物矛盾。
+
+import report_outline as _ro
+
+
+def _mm(n_rise, n_drop):
+    mk = lambda i, pct: {"问题点": f"诉点{i}", "上月": 10, "本月": 20, "变幅": pct}
+    return {"环比超标上升": [mk(i, f"+{100 - i}.0%") for i in range(n_rise)],
+            "骤降提示": [mk(100 + i, f"-{50 - i}.0%") for i in range(n_drop)]}
+
+
+def _data_rows(md):
+    """只取数据行——表头也是 "| 诉点 | 上月 …" 开头，用 startswith 会把它一起算进去。"""
+    return [l for l in md.splitlines() if re.match(r"^\| 诉点\d", l)]
+
+
+def test_mom_yoy_truncates_to_topn_and_points_to_attachment():
+    md = _ro._mom_yoy_table(_mm(20, 15), "投诉", top_n=10)
+    assert len(_data_rows(md)) == 10, "正文只留 Top10"
+    assert "共 35 项" in md and "附件" in md, "须写明总数并指向附件"
+
+
+def test_mom_yoy_sorted_by_amplitude_desc():
+    md = _ro._mom_yoy_table(_mm(6, 6), "投诉", top_n=12)
+    pcts = [float(l.split("|")[4].strip().rstrip("%")) for l in _data_rows(md)]
+    assert pcts == sorted(pcts, reverse=True), "按变幅从高到低"
+    assert pcts[0] > 0 > pcts[-1], "上升项与骤降项混排后仍按变幅排，不是先升后降"
+
+
+def test_mom_yoy_no_attachment_note_when_within_topn():
+    md = _ro._mom_yoy_table(_mm(3, 2), "投诉", top_n=10)
+    assert "附件" not in md, "没超 TopN 就不必外移，别硬加指引"
+    assert len(_data_rows(md)) == 5
+
+
+def test_mom_yoy_uses_side_specific_term():
+    assert "| 问题 |" in _ro._mom_yoy_table(_mm(2, 0), "督办", top_n=10)
+
+
+def test_附件清单单独拆出以便排到正文最后():
+    """用户 2026-07-25：附件清单要放正文最后一部分，即排在策略建议之后。"""
+    import report_outline
+    metrics = {"模型": {}, "预警汇总": [], "参数快照": {}}
+    narrative = {"章节": {"投诉情况": {}, "督办情况": {}, "督办转投诉预警": {},
+                         "在途活动关联": {}, "重复发现问题清单": {},
+                         "兜底类目专项分析": {}, "附件清单": {}}}
+    outline = report_outline.build_outline(metrics, {}, narrative)
+    main, appendix = report_outline.split_appendix(outline)
+    assert [s["title"] for s in appendix] == ["附件清单"]
+    assert "附件清单" not in [s["title"] for s in main]
+    assert main[-1]["title"] == "兜底类目专项分析"        # 其余顺序不变

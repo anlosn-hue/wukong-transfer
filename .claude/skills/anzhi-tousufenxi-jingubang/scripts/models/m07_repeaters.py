@@ -21,7 +21,7 @@ def run(ctx, params):
     if 惯犯:
         # 做成表格而非"- 名称：{python dict}"——原写法把字典 repr 直接印进正式报告，
         # 读者看到的是 {'2026-04': 216, ...} 这种带引号大括号的东西（2026-07-21 officecli 体检发现）
-        head = ("| 问题点 | " + " | ".join(window) + " | 趋势 |\n"
+        head = ("| 诉点 | " + " | ".join(window) + " | 趋势 |\n"
                 "|---|" + "---|" * (len(window) + 1))
         rows = []
         for x in 惯犯:
@@ -31,6 +31,6 @@ def run(ctx, params):
         body = head + "\n" + "\n".join(rows)
     else:
         note = f"（近{streak_n}个月数据不连续或不足）" if not 连续无缺 else ""
-        body = f"暂无连续{streak_n}个月上榜Top{topn}的问题点{note}"
+        body = f"暂无连续{streak_n}个月上榜Top{topn}的诉点{note}"
     md = "### 重复问题清单（升格进事件库候选）\n\n" + body
     return {"指标": {"惯犯": 惯犯, "数据月数": 数据月数}, "预警": [], "md": md}

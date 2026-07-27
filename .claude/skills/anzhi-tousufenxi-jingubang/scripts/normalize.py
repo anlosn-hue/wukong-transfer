@@ -41,6 +41,21 @@ def load_dept_map(path):
         return {}
     return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
 
+def load_menu_map(path):
+    """跨表二级菜单归一映射：{源表写法: 统一写法}。文件不存在则返回空表（不归一）。
+
+    为什么需要：两张源表对同一业务概念的二级菜单命名可能不同（实证：督办表
+    「借记卡增值服务积点权益问题」= 投诉表「借记卡增值权益服务问题」）。而「问题点」
+    是二级+三级拼接串，m04_escalation 按该串跨表精确匹配。名称不一致 → 匹配恒为 0 →
+    红警静默漏报，不报错、不告警。2026-06 报告即因此漏掉 1 个红色预警
+    （投诉侧近3月238笔月均79≥20、督办侧当月18笔≥10，双门槛均过）。
+    """
+    p = Path(path)
+    if not p.exists():
+        return {}
+    data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    return data.get("二级菜单", {}) or {}
+
 def _overtime_status(row):
     """超时口径（2026-07-21 用户定）：只认「超时天数」≥1 天，不看「是否超时办结」标志位——
     真实数据里 2026 年 5-6 月 3034 行仅 2 行填「是」，而带超时天数的有 380 行，标志位不可用。
@@ -48,7 +63,7 @@ def _overtime_status(row):
     days = row.get("超时天数")
     return "超时" if pd.notna(days) and days >= 1 else "正常"
 
-def clean(df, kind, dept_map):
+def clean(df, kind, dept_map, menu_map=None):
     df = df.rename(columns=HEADER_MAP).copy()
     if kind == "tousu" and "受理日期" not in df.columns and "受理时间" in df.columns:
         df = df.rename(columns={"受理时间": "受理日期"})  # 老sheet列名漂移
@@ -66,6 +81,10 @@ def clean(df, kind, dept_map):
         # render_report.py/m08_activity.py 的markdown表格逐行split("|")解析（代码审查2026-07-07发现）
         df[c] = (df[c].where(df[c].notna(), "").astype(str).str.replace("　", " ")
                  .str.replace("|", "｜").str.replace("\r\n", " ").str.replace("\n", " ").str.strip())
+    # 跨表二级菜单归一必须在拼「问题点」之前——问题点一旦拼好，下游全部按串比对，
+    # 再归一就晚了（见 load_menu_map 注释）
+    if menu_map:
+        df["二级菜单"] = df["二级菜单"].map(lambda v: menu_map.get(v, v))
     二, 三 = df["二级菜单"].fillna(""), df["三级菜单"].fillna("")
     # 菜单层级之间用「-」连接，不用「/」——菜单名本身常含「/」（如"短信未达/延迟问题"），
     # 用「/」当连接符会让读者分不清哪个斜杠是层级分隔（2026-07-21 用户要求）
@@ -90,7 +109,8 @@ def run(base):
     (lib / "duban").mkdir(parents=True, exist_ok=True)
     (lib / "tousu").mkdir(parents=True, exist_ok=True)
     dept_map = load_dept_map(lib / "部门映射.yaml")
-    summary = {"入库": [], "未识别": [], "未映射主办单位": []}
+    menu_map = load_menu_map(lib / "菜单映射.yaml")
+    summary = {"入库": [], "未识别": [], "未映射主办单位": [], "菜单归一": []}
     meta_p = lib / "_meta.json"
     meta = json.loads(meta_p.read_text(encoding="utf-8")) if meta_p.exists() else {"duban": {}, "tousu": {}}
     buckets = {}  # (kind, month) -> [DataFrame,...]；同月数据可能来自不同sheet/文件，需合并
@@ -103,7 +123,18 @@ def run(base):
             if kind is None:
                 summary["未识别"].append(f"{f.name}::{sheet}")
                 continue
-            out, unmapped = clean(df, kind, dept_map)
+            # 归一前先记下本批实际用到了哪些映射——报告「报告说明」章须披露映射关系
+            # （规范 A8a），否则读者看到的诉点名与源表对不上却无从解释
+            if menu_map:
+                col = "业务细分二级菜单" if "业务细分二级菜单" in df.columns else "二级菜单"
+                if col in df.columns:
+                    for v in df[col].dropna().astype(str).str.strip().unique():
+                        if v not in menu_map:
+                            continue
+                        rec = f"{v} → {menu_map[v]}"
+                        if rec not in summary["菜单归一"]:
+                            summary["菜单归一"].append(rec)
+            out, unmapped = clean(df, kind, dept_map, menu_map)
             summary["未映射主办单位"] += [u for u in unmapped if u not in summary["未映射主办单位"]]
             # 按行内实际受理日期拆月——同一sheet可能横跨多个月（如"2026年5月、6月"合并表），
             # 不能只按sheet名/文件名打一个整体月份标签（2026-07-08真实数据发现此问题）
@@ -126,6 +157,9 @@ def run(base):
         summary["入库"].append({"表": kind, "月份": month, "条数": len(combined)})
         meta[kind][month] = {"条数": len(combined)}
     meta["未映射主办单位"] = summary["未映射主办单位"]  # 持久化，供 INDEX 全貌页"映射待补"板块渲染
+    # 菜单归一同样持久化：报告「报告说明」章要披露映射关系（规范 A8a），
+    # 而渲染在 run_analysis 阶段发生，拿不到本函数的返回值
+    meta["菜单归一"] = summary["菜单归一"]
     meta_p.write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
     return summary
 

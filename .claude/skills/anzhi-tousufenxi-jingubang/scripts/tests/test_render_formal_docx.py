@@ -98,6 +98,76 @@ def test_render_table_md_skips_separator_row_by_position(tmp_path):
     doc = Document(str(d / "月度分析报告.docx"))
     tousu_table = next(t for t in doc.tables if t.rows[0].cells[0].text == "#")
     # 表头行应是第0行、无分隔符行混入、数据行按顺序对应
-    assert [c.text for c in tousu_table.rows[0].cells] == ["#", "问题点", "笔数", "占比"]
+    assert [c.text for c in tousu_table.rows[0].cells] == ["#", "诉点", "笔数", "占比"]
     assert [c.text for c in tousu_table.rows[1].cells] == ["1", "甲问题", "10", "50.0%"]
     assert [c.text for c in tousu_table.rows[2].cells] == ["2", "乙问题", "5", "25.0%"]
+
+
+def test_docx_悬浮标记退化为标签不漏源码(tmp_path):
+    """Word 没有悬停形态：〔tip:标签¦明细〕必须只留标签，明细走附件。
+    正文段落、callout、表格单元格三条路径都要覆盖——任一条漏掉都会把源码印进公文。"""
+    import copy
+    d = tmp_path / "报告" / "2026-05"; d.mkdir(parents=True)
+    n = copy.deepcopy(NARRATIVE)
+    n["结论摘要"] = ["高敏感共〔tip:73案¦06-07 零售信贷部‖06-09 财富管理部〕。"]
+    n["章节"]["督办转投诉预警"]["风险提示"] = "重点看〔tip:监管49案¦某条明细〕。"
+    n["章节"]["兜底类目专项分析"] = {
+        "叙述": "见下。", "洞察": None, "风险提示": None,
+        "表格": "| 类别 | 说明 |\n|---|---|\n| 甲 | 〔tip:4案¦表内明细〕 |"}
+    (d / "指标.json").write_text(json.dumps(METRICS, ensure_ascii=False), encoding="utf-8")
+    (d / "叙述.json").write_text(json.dumps(n, ensure_ascii=False), encoding="utf-8")
+    render_formal_docx.run(d, {})
+    text = _full_text(Document(str(d / "月度分析报告.docx")))
+    assert "〔tip:" not in text and "¦" not in text and "‖" not in text
+    assert "高敏感共73案。" in text            # 正文段落
+    assert "重点看监管49案。" in text          # callout
+    assert "4案" in text and "表内明细" not in text  # 表格单元格
+
+
+def test_docx_专项章节的markdown列表渲染成项目符号(tmp_path):
+    """（八）高敏感条目改成分点后，docx 若不认 '- ' 会把整段挤成一个段落、
+    并把 '-' 原样印出来。每条要各自成段并挂 List Bullet 样式。"""
+    import copy
+    d = tmp_path / "报告" / "2026-05"; d.mkdir(parents=True)
+    n = copy.deepcopy(NARRATIVE)
+    n["章节"]["兜底类目专项分析"] = {
+        "叙述": "见下。", "洞察": None, "风险提示": None,
+        "表格": "### （八）高敏感\n\n- **甲类 3案**：说明甲。\n- **乙类 4案**：说明乙。"}
+    (d / "指标.json").write_text(json.dumps(METRICS, ensure_ascii=False), encoding="utf-8")
+    (d / "叙述.json").write_text(json.dumps(n, ensure_ascii=False), encoding="utf-8")
+    render_formal_docx.run(d, {})
+    doc = Document(str(d / "月度分析报告.docx"))
+    bullets = [p for p in doc.paragraphs if p.style.name == "List Bullet"]
+    texts = [p.text for p in bullets]
+    assert "甲类 3案：说明甲。" in texts and "乙类 4案：说明乙。" in texts
+    assert not any(t.lstrip().startswith("-") for t in texts)   # 不得留下 markdown 的 '-'
+    assert "**" not in _full_text(doc)                          # 粗体落成 run，不是字面星号
+
+
+def test_docx_单个星号对不成对时按字面处理():
+    """同 html：落单的 ** 不得把后文全部加粗。"""
+    from docx import Document as _D
+    import docx_footnotes as fn
+    doc = _D()
+    fn.add_text_with_footnotes(doc, "甲**乙：说明", fn.FootnoteManager(), {})
+    p = doc.paragraphs[-1]
+    assert p.text == "甲**乙：说明"
+    assert not any(r.bold for r in p.runs)
+
+
+def test_docx_章节叙述支持分段与分点(tmp_path):
+    """docx 侧同样：叙述里的换行要各自成段，'- ' 要成项目符号。"""
+    import copy
+    d = tmp_path / "报告" / "2026-05"; d.mkdir(parents=True)
+    n = copy.deepcopy(NARRATIVE)
+    n["章节"]["投诉情况"]["叙述"] = ("总述一句。\n- **第一位** 甲：1038条\n- **第二位** 乙：228条\n"
+                                    "环比方面，另起一段。")
+    (d / "指标.json").write_text(json.dumps(METRICS, ensure_ascii=False), encoding="utf-8")
+    (d / "叙述.json").write_text(json.dumps(n, ensure_ascii=False), encoding="utf-8")
+    render_formal_docx.run(d, {})
+    doc = Document(str(d / "月度分析报告.docx"))
+    texts = [p.text for p in doc.paragraphs]
+    assert "总述一句。" in texts and "环比方面，另起一段。" in texts   # 各自成段
+    bl = [p.text for p in doc.paragraphs if p.style.name == "List Bullet"]
+    assert "第一位 甲：1038条" in bl and "第二位 乙：228条" in bl
+    assert "**" not in _full_text(doc)

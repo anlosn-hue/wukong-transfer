@@ -41,7 +41,9 @@ def run(ctx, params):
         year_rank = {x["问题点"]: i for i, x in enumerate(指标[label].get("今年", []))}
         for i, x in enumerate(指标[label].get("本月", [])):
             p = x["问题点"]
-            x["变动"] = "新进榜" if p not in year_rank else ("↑" if year_rank[p] - i >= 3 else "")
+            # 措辞写死基准是「今年榜」：下面首进榜黄警的基准是「上月榜」，两者不同源。
+            # 都叫"新进榜"会让读者拿其中一个去理解另一个（2026-07-25 处室批注即问到这点）。
+            x["变动"] = "今年榜新上榜" if p not in year_rank else ("↑" if year_rank[p] - i >= 3 else "")
         # 首进榜黄警：上月（日历精确）榜里没有的本月上榜点；缺月不猜测，直接跳过（2026-07-07修复：
         # 此前用"排序后取相邻可用月"，缺月时会把更早的月份误当成"上月"）
         prev = month_shift(ctx["month"], -1)
@@ -50,8 +52,11 @@ def run(ctx, params):
             for x in 指标[label].get("本月", []):
                 if x["问题点"] not in prev_top:
                     预警.append({"级别": "黄", "表": label, "问题点": x["问题点"],
-                                 "依据": f"首次进入{label}本月Top{n}（{x['笔数']}笔）"})
+                                 "依据": f"较上月新进入{label}Top{n}（{x['笔数']}笔）"})
         rows = "\n".join(f"| {i+1} | {x['问题点']} | {x['笔数']} | {x['占比']} | {x.get('变动','')} |"
                          for i, x in enumerate(指标[label].get("本月", [])))
-        md.append(f"### {label}·问题点排名（本月）\n\n| # | 问题点 | 笔数 | 占比 | 变动 |\n|---|---|---|---|---|\n{rows}")
+        # 表头与小节标题按侧别取对客称谓（规范 A5）：投诉侧「诉点」、督办侧「问题」
+        term = "问题" if label == "督办" else "诉点"
+        md.append(f"### {label}·{term}排名（本月）\n\n| # | {term} | 笔数 | 占比 | 变动 |"
+                  f"\n|---|---|---|---|---|\n{rows}")
     return {"指标": 指标, "预警": 预警, "md": "\n\n".join(md)}

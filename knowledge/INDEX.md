@@ -10,6 +10,7 @@
 | 六维规则库 | [tools/六维规则库/](tools/六维规则库/) | 6个维度规则文件（01-政治敏感性/02-流程合规性/03-材料规范性/04-事项合理性/05-评估准确性/06-预案完备性），含检查项、常见问题、判断结论格式；火眼金睛技能运行时加载 | V1完成（2026-05-25） | — |
 | 声誉风险评估手册 | [tools/assessment-manual/](tools/assessment-manual/) | 脑子侧：`声誉风险分级模型.md`（可读版）；`private/处室清单.md`（PII·git忽略，junction→data区）；`private/顺风耳配置.md`（DailyHotApi 地址，顺风耳技能读取，PII·git忽略）。原始表单素材（xlsx/png）已迁至 data-reputation-risk/knowledge-raw/assessment-manual/（云同步）。 | 建设中 | — |
 | 管理机制 | [tools/管理机制/](tools/管理机制/) | 脑子侧：4部法规 .md（可读版）；原件（通知.docx/考评表.xlsx/法规.zip）已迁至 data-reputation-risk/knowledge-raw/管理机制原件/（云同步）。 | 持续更新 | — |
+| 报告体例规范 | [tools/报告体例规范.md](tools/报告体例规范.md) | 行内报告体例与去 AI 化规则：A 术语口径／B 元话语／C 措辞／D 版面／E 高频词五类 + 交付前自检项 + 四技能挂载点。**明确排除 Humanizer「个性与灵魂」节**（公文禁用）。适用金箍棒/紧箍咒/千里眼/火眼金睛·照妖镜的对外交付件 | V1（2026-07-25） | 2026-06 月度投诉分析报告处室修订 |
 
 ## 专项任务
 

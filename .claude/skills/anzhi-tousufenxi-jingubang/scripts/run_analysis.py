@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 import pandas as pd
 import yaml
+import normalize
 from models import REGISTRY
 
 LEVEL_ORDER = {"红": 0, "橙": 1, "黄": 2}
@@ -42,16 +43,27 @@ def estimate_dig_candidates(ctx, warnings, dig_cfg):
         cands.append({"问题点": p, "级别": w["级别"], "条数": rows, "预估字数": chars})
     return cands
 
-def data_scope(ctx):
-    """本期数据范围：两张表各自的条数与实际出现的部门/机构清单，供报告首章「报告说明」渲染。
-    督办侧取映射后的标准部门名，投诉侧取原始责任机构（含合并称谓，不再二次拆分）。"""
+def _meta(lib_dir):
+    p = Path(lib_dir) / "_meta.json"
+    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+
+def data_scope(ctx, dept_map=None):
+    """本期数据范围：两张表各自的条数与实际出现的部门清单，供报告首章「报告说明」渲染。
+
+    两侧都过一遍部门映射（督办侧「部门」列已在 normalize 阶段映射过，此处幂等；
+    投诉侧「责任机构」是原始写法，含行名与合并称谓）。报告正文一律写「总行XX部」，
+    不写行名、不列本期口径外的部门——规范 A2，2026-06 报告即因投诉侧原样保留
+    「兴业银行零售金融部/消费者权益保护办公室/养老金融部」被处室修订（knowledge/tools/报告体例规范.md）。
+    映射表里没有的原样保留，不静默丢弃——留着被人看见才会去补映射。"""
+    dept_map = dept_map or {}
     out = {}
     for kind, label, col in (("duban", "督办", "部门"), ("tousu", "投诉", "责任机构")):
         df = ctx[kind].get(ctx["month"])
         if df is None or not len(df) or col not in df.columns:
             out[label] = {"条数": 0, "机构": []}
             continue
-        vals = sorted({str(v).strip() for v in df[col].dropna() if str(v).strip()})
+        vals = sorted({dept_map.get(s, s) for s in
+                       (str(v).strip() for v in df[col].dropna()) if s})
         out[label] = {"条数": int(len(df)), "机构": vals}
     return out
 
@@ -76,7 +88,8 @@ def run(lib_dir, month, config, out_dir):
     warnings = sort_warnings(warnings)
     result = {"月份": month, "生成时间": datetime.now().strftime("%Y-%m-%d %H:%M"),
               "参数快照": {"分析模型": config.get("分析模型", {}), "深挖": config.get("深挖", {})},
-              "数据范围": data_scope(ctx),
+              "数据范围": data_scope(ctx, normalize.load_dept_map(Path(lib_dir) / "部门映射.yaml")),
+              "菜单归一": _meta(lib_dir).get("菜单归一", []),
               "预警汇总": warnings, "模型": models_out,
               "深挖候选": estimate_dig_candidates(ctx, warnings, config.get("深挖", {}))}
     (out_dir / "指标.json").write_text(json.dumps(result, ensure_ascii=False, indent=1),

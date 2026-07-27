@@ -109,7 +109,9 @@ def test_m04_red_on_escalation(lib_two_months):
     reds = [w for w in r["预警"] if w["级别"] == "红"]
     assert len(reds) == 1
     assert reds[0]["问题点"] == "协商还款问题-逾期无力归还"
-    assert "当月另有3笔" in reds[0]["依据"] and "转为正式投诉" in reds[0]["依据"]
+    # 依据口径＝两张表重合，不是时间流向（用户 2026-07-25）
+    assert "又有3笔" in reds[0]["依据"] and "潜在投诉风险点" in reds[0]["依据"]
+    assert "演化" not in reds[0]["依据"] and "转为正式投诉" not in reds[0]["依据"]
     # 走势数据存在（供预警点文件渲染近3月走势）
     assert "走势" in r["指标"] and "协商还款问题-逾期无力归还" in r["指标"]["走势"]
 
@@ -133,3 +135,103 @@ def test_m04_prolific_union_not_intersection(lib_two_months):
     # "网银登录问题/验证码失效"14笔/2月=7≥5，排第二被TopN排除——若代码误用交集(&)会被漏掉，并集(|)才能入选
     assert "网银登录问题/验证码失效" in r["指标"]["多发类型"]
     assert len(r["指标"]["多发类型"]) == 2
+
+
+# ---- 疑似跨表命名错配探测（2026-07-25 新增）----
+# 归一映射（normalize.load_menu_map）负责修已知的不一致；本探测是兜底，
+# 用于发现映射表里还没有的新不一致——否则漏报是静默的，没有任何信号。
+
+def test_m04_flags_suspected_name_mismatch(lib_two_months):
+    # 投诉侧造一个多发诉点「甲二级-共用三级」；督办侧当月放同一个三级菜单，
+    # 但二级菜单写法不同（「乙二级」）→ 拼串不等 → 命中恒为0 → 应给出错配提示
+    for month in ("2026-05", "2026-06"):
+        p = lib_two_months / "底库" / "tousu" / f"{month}.csv"
+        df = pd.read_csv(p, encoding="utf-8-sig")
+        extra = df.iloc[[0] * 8].copy()
+        extra[["二级菜单", "三级菜单", "问题点"]] = ["甲二级", "共用三级", "甲二级-共用三级"]
+        pd.concat([df, extra]).to_csv(p, index=False, encoding="utf-8-sig")
+    p = lib_two_months / "底库" / "duban" / "2026-06.csv"
+    df = pd.read_csv(p, encoding="utf-8-sig")
+    extra = df.iloc[[0] * 4].copy()
+    extra[["二级菜单", "三级菜单", "问题点"]] = ["乙二级", "共用三级", "乙二级-共用三级"]
+    pd.concat([df, extra]).to_csv(p, index=False, encoding="utf-8-sig")
+
+    r = m04_escalation.run(_ctx(lib_two_months),
+                           {"启用": True, "回看月数": 3, "月均笔数": 5, "命中门槛": 3})
+    assert [w for w in r["预警"] if w["问题点"] == "甲二级-共用三级"] == []  # 现状仍漏
+    mism = r["指标"]["疑似命名错配"]
+    assert len(mism) == 1
+    assert mism[0]["投诉侧问题点"] == "甲二级-共用三级"
+    assert mism[0]["督办侧疑似对应"] == ["乙二级-共用三级"]
+    assert mism[0]["督办侧笔数"] == 4
+
+def test_m04_no_mismatch_hint_when_duban_truly_absent(lib_two_months):
+    # 督办侧根本没有这个三级菜单 → 属真实不存在，不得报错配（避免噪声）
+    for month in ("2026-05", "2026-06"):
+        p = lib_two_months / "底库" / "tousu" / f"{month}.csv"
+        df = pd.read_csv(p, encoding="utf-8-sig")
+        extra = df.iloc[[0] * 8].copy()
+        extra[["二级菜单", "三级菜单", "问题点"]] = ["甲二级", "独有三级", "甲二级-独有三级"]
+        pd.concat([df, extra]).to_csv(p, index=False, encoding="utf-8-sig")
+    r = m04_escalation.run(_ctx(lib_two_months),
+                           {"启用": True, "回看月数": 3, "月均笔数": 5, "命中门槛": 3})
+    assert [m for m in r["指标"]["疑似命名错配"] if m["投诉侧问题点"] == "甲二级-独有三级"] == []
+
+def test_m04_no_mismatch_hint_when_already_matched(lib_two_months):
+    # 两表写法一致、已正常命中的诉点，不应出现在错配清单里
+    r = m04_escalation.run(_ctx(lib_two_months),
+                           {"启用": True, "回看月数": 3, "月均笔数": 5, "命中门槛": 3})
+    assert r["指标"]["疑似命名错配"] == []
+
+
+# ---- 两个「新」必须分词（2026-07-25，批注 1）----
+# 黄警的"首次"基准是**日历上月**榜（month_shift(-1)）；
+# 排名表「变动」列的标记基准是**今年**榜（year_rank）。同一份报告里两个"新"含义不同，
+# 措辞必须能区分，否则读者按其中一个理解另一个必然读错。
+
+def test_m01_yellow_reason_states_last_month_baseline(lib_two_months):
+    df = pd.read_csv(lib_two_months / "底库" / "tousu" / "2026-06.csv", encoding="utf-8-sig")
+    extra = df.iloc[[0] * 3].copy()
+    extra[["二级菜单", "三级菜单", "问题点"]] = ["新业务", "新故障", "新业务-新故障"]
+    pd.concat([df, extra]).to_csv(lib_two_months / "底库" / "tousu" / "2026-06.csv",
+                                  index=False, encoding="utf-8-sig")
+    r = m01_ranking.run(_ctx(lib_two_months), {"启用": True, "TopN": 10, "时间窗": ["本月"]})
+    hit = [w for w in r["预警"] if w["问题点"] == "新业务-新故障"][0]
+    assert "较上月新进入" in hit["依据"]
+    assert "首次进入" not in hit["依据"]
+
+def test_m01_change_column_states_year_baseline(lib_two_months):
+    # 今年榜含本月，所以必须造出"本月在榜、今年不在榜"才验得到该标记：
+    # TopN=1；6月新增13笔新诉点 → 本月榜第一（13 > 协商12）；
+    # 今年累计协商16 > 新诉点13 → 今年榜第一仍是协商，新诉点落榜。
+    p = lib_two_months / "底库" / "tousu" / "2026-06.csv"
+    df = pd.read_csv(p, encoding="utf-8-sig")
+    extra = df.iloc[[0] * 13].copy()
+    extra[["二级菜单", "三级菜单", "问题点"]] = ["新业务", "新故障", "新业务-新故障"]
+    pd.concat([df, extra]).to_csv(p, index=False, encoding="utf-8-sig")
+    r = m01_ranking.run(_ctx(lib_two_months),
+                        {"启用": True, "TopN": 1, "时间窗": ["本月", "今年"]})
+    marks = {x["问题点"]: x.get("变动") for x in r["指标"]["投诉"]["本月"]}
+    assert marks["新业务-新故障"] == "今年榜新上榜"
+    assert "新进榜" not in set(marks.values())
+
+
+def test_m04_lists_zero_hit_prolific_points(lib_two_months):
+    """「督办零命中」清单：比疑似错配更宽的兜底。错配探测只认三级菜单相同的情形，
+    三级菜单名也漂移时探不到；零命中清单能把这类诉点一并露出来供人工扫。"""
+    for month in ("2026-05", "2026-06"):
+        p = lib_two_months / "底库" / "tousu" / f"{month}.csv"
+        df = pd.read_csv(p, encoding="utf-8-sig")
+        extra = df.iloc[[0] * 8].copy()
+        extra[["二级菜单", "三级菜单", "问题点"]] = ["甲二级", "甲三级", "甲二级-甲三级"]
+        pd.concat([df, extra]).to_csv(p, index=False, encoding="utf-8-sig")
+    # 让「协商还款问题-逾期无力归还」在督办侧真的命中，才验得到"已命中的不进清单"
+    p = lib_two_months / "底库" / "duban" / "2026-06.csv"
+    df = pd.read_csv(p, encoding="utf-8-sig")
+    df.loc[0:2, ["二级菜单", "三级菜单", "问题点"]] = ["协商还款问题", "逾期无力归还",
+                                                       "协商还款问题-逾期无力归还"]
+    df.to_csv(p, index=False, encoding="utf-8-sig")
+    r = m04_escalation.run(_ctx(lib_two_months),
+                           {"启用": True, "回看月数": 3, "月均笔数": 5, "命中门槛": 3})
+    assert "甲二级-甲三级" in r["指标"]["督办零命中"]
+    assert "协商还款问题-逾期无力归还" not in r["指标"]["督办零命中"]

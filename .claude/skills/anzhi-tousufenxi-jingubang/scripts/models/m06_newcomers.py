@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""m06 新面孔：上月为零、本月冒出≥门槛的问题点（督办+投诉都查）→ 黄警"""
+"""m06 新面孔：上月为零、本月冒出≥门槛的诉点（督办+投诉都查）→ 黄警"""
 from month_utils import month_shift
 
 TABLES = {"duban": "督办", "tousu": "投诉"}
@@ -24,4 +24,4 @@ def run(ctx, params):
         指标[label] = news
     total = sum(len(v) for v in 指标.values() if isinstance(v, list))
     return {"指标": 指标, "预警": 预警,
-            "md": f"### 新面孔问题点\n\n本月新冒出 {total} 个（详见预警总览黄警条目）"}
+            "md": f"### 新面孔诉点\n\n本月新冒出 {total} 个（详见预警总览黄色预警条目）"}
