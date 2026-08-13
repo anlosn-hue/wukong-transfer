@@ -17,7 +17,7 @@ function Write-Fx { param([string]$Rel, [string]$Content)
 function New-GreenFixture {
     if (Test-Path $script:FixtureRoot) { Remove-Item $script:FixtureRoot -Recurse -Force }
     foreach ($d in @("knowledge\cases", "knowledge\活动方案库", "knowledge\tools\六维规则库",
-                     "memory", "work\声誉风险评估\20260701-测试活动", "work\活动评审")) {
+                     "work\声誉风险评估\20260701-测试活动", "work\活动评审")) {
         New-Item -ItemType Directory -Force (Join-Path $script:FixtureRoot $d) | Out-Null
     }
     Write-Fx "knowledge\log.md" "# log"
@@ -49,28 +49,8 @@ assessment_path: work/声誉风险评估/20260701-测试活动/
 status: 进行中
 ---
 "@
-    Write-Fx "memory\海马体.md" @"
-# 海马体
-
-## 待处理条目
-
-| 条目 | 类型 | 出口 | 来源/时间 |
-|------|------|------|---------|
-| 测试条目进行中 | 任务跨会话 | 完结后删条 | 2026-07-20 |
-
-## 触发清单
-"@
-    Write-Fx "memory\backlog.md" @"
-# Backlog
-
-## 挂账清单
-
-| # | 事项 | 背景与下一步 | 到期日 | 来源 |
-|---|------|------------|--------|------|
-| 1 | 测试挂账 | 测试 | 到期日：2026-12-31 | 2026-07-24 |
-
-## 已销账
-"@
+    # memory\海马体.md 与 memory\backlog.md 的 fixture 随检查4 于 2026-08-13 退役后移除
+    # (本脚本已不再读 memory\, 结构体检归点卯 hippo-lib)
 }
 
 function Invoke-Lint {
@@ -284,63 +264,9 @@ $r = Invoke-Lint
 Assert ($r.Exit -eq 0) "占位状态不红 (实际 $($r.Exit))"
 Assert ($r.Out -match '数据未落位' -and $r.Out -match '跳过') "输出黄牌声明占位跳过"
 
-# ---- T10: 海马体结构(出口空/完结残留/类型外/滞留>30天) ----
-Write-Host "T10: 海马体结构体检"
-New-GreenFixture
-Write-Fx "memory\海马体.md" @"
-# 海马体
-
-## 待处理条目
-
-| 条目 | 类型 | 出口 | 来源/时间 |
-|------|------|------|---------|
-| 缺出口的条目 | 任务跨会话 |  | 2026-07-20 |
-| ✅已完结却没删的条目 | 新排查要点 | 事件库 01 | 2026-07-20 |
-| 类型乱写的条目 | 随手记 | 某出口 | 2026-07-20 |
-| 滞留很久的条目 | 任务跨会话 | 完结后删条 | 2026-06-01 |
-| 带wiki链接的正常条目 [[a/b\|b]] | 专业判断（定级判例） | 05 §4 | 2026-07-21 |
-
-## 触发清单
-"@
-$r = Invoke-Lint
-Assert ($r.Exit -eq 1) "海马体结构红 (实际 $($r.Exit))"
-Assert ($r.Out -match '出口列为空') "报出口空"
-Assert ($r.Out -match '完结标记残留') "报✅残留"
-Assert ($r.Out -match '不在五类') "报类型枚举外"
-Assert ($r.Out -match '滞留 53 天') "报滞留53天(2026-06-01至07-24, 黄)"
-Assert ($r.Out -notmatch '带wiki链接的正常条目.*不在五类|带wiki链接的正常条目.*列数') "转义竖线不破坏劈列, 正常条目不误报"
-
-# ---- T11: backlog 到期日(过期红/45天内黄) ----
-Write-Host "T11: backlog 到期日扫描"
-New-GreenFixture
-Write-Fx "memory\backlog.md" @"
-# Backlog
-
-## 挂账清单
-
-| # | 事项 | 背景与下一步 | 到期日 | 来源 |
-|---|------|------------|--------|------|
-| 1 | 已过期挂账 | 测试 | 到期日：2026-07-01 | 2026-06-01 |
-| 2 | 快到期挂账 | 测试 | 到期日：2026-08-30 | 2026-07-01 |
-| 3 | 无期限挂账 | 测试 | - | 2026-07-01 |
-| 4 | 日期烂掉的挂账 | 测试 | 到期日：待定 | 2026-07-01 |
-
-## 已销账
-"@
-$r = Invoke-Lint
-Assert ($r.Exit -eq 1) "过期红 (实际 $($r.Exit))"
-Assert ($r.Out -match '已过期 23 天') "报过期23天(07-01至07-24)"
-Assert ($r.Out -match '37 天后到期') "报37天后到期(黄, 45天窗内)"
-Assert ($r.Out -match '无法解析日期') "报日期烂掉(黄)"
-Assert ($r.Out -notmatch '无期限挂账') "「-」不报"
-
-# ---- T11b: 海马体/backlog 章节标记被改动 -> 红(防匹配静默失效) ----
-Write-Host "T11b: 章节标记丢失"
-New-GreenFixture
-Write-Fx "memory\海马体.md" "# 海马体`n`n## 改了名的章节`n"
-$r = Invoke-Lint
-Assert ($r.Exit -eq 1) "章节丢失红 (实际 $($r.Exit))"
-Assert ($r.Out -match '待处理条目.*未找到') "报章节标记未找到"
+# 注: 原 T10/T11/T11b(海马体结构体检、backlog 到期日扫描、章节标记丢失)随检查4
+# 于 2026-08-13 一并退役——该职责移交点卯 hippo-lib(anzhi-dianmao/scripts/hippo-lib.ps1),
+# 对应用例在 anzhi-dianmao/scripts/test-hippo.ps1。此处不再保留, 防两套解析器漂移。
 
 # ---- 汇总 ----
 Write-Host ""

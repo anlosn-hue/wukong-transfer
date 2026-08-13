@@ -1,10 +1,10 @@
-﻿# index_lint.ps1 -- 知识库索引与记忆结构机械体检（纯体检、零代写）
+﻿# index_lint.ps1 -- 知识库索引机械体检（纯体检、零代写）
 # 设计依据: docs/superpowers/specs/2026-07-24-自维护机制-design.md D6/D7
-# 四项检查:
+# 三项检查:
 #   1. INDEX 双向核对: cases/活动方案库/六维规则库 登记 vs 目录实际(死链+隐身); knowledge 总览只查死链
 #   2. 活动库: 状态 vs 时间窗 vs 今日矛盾 + INDEX 行与卡片字段一致性 + 状态枚举 + 畸形行(列数!=12)
 #   3. 活动卡 assessment_path <-> work/ 实际目录双向核对(work/ 缺失时黄牌跳过)
-#   4. 海马体/backlog 结构体检: 出口列必填/无完结残留/类型五枚举/条目年龄>30天/到期日过期与45天预警
+#   (第4项已退役 2026-08-13: 海马体/backlog 结构体检移交点卯 hippo-lib, 防两套解析器漂移——器官化推广 spec)
 # 用法: powershell -File scripts\index_lint.ps1 [-Root <仓根>] [-Today yyyy-MM-dd]
 #   -Today 供测试钉死日期; 不传取当天
 # 输出: [红]=错误(exit 1, 当次会话内订正或报安之裁定, 报告不许只看不办) / [黄]=提醒(exit 0) / [绿]=通过
@@ -39,7 +39,7 @@ function Get-Dates { param([string]$Text)
     return ,$out
 }
 
-# markdown 表行拆单元格; 尊重 \| 转义(海马体条目含 wiki 链接); 非表行/分隔行返回 $null
+# markdown 表行拆单元格; 尊重 \| 转义(单元格内可含 wiki 链接/管道符); 非表行/分隔行返回 $null
 function Split-TableRow { param([string]$Line)
     $t = ([string]$Line).Trim()
     if (-not $t.StartsWith("|")) { return $null }
@@ -47,17 +47,6 @@ function Split-TableRow { param([string]$Line)
     $inner = $t.Trim('|')
     $cells = [regex]::Split($inner, '(?<!\\)\|')
     return ,($cells | ForEach-Object { $_.Trim() })
-}
-
-# 提取 $Heading 起到下一个 "## " 标题前的文本; 未找到返回 $null
-# 锚定行首整行匹配, 防止正文里出现同名字样(引用/说明)时截错节
-function Get-Section { param([string]$Text, [string]$Heading)
-    $m = [regex]::Match($Text, "(?m)^" + [regex]::Escape($Heading) + "\s*$")
-    if (-not $m.Success) { return $null }
-    $rest = $Text.Substring($m.Index + $m.Length)
-    $next = [regex]::Match($rest, "(?m)^## ")
-    if ($next.Success) { return $rest.Substring(0, $next.Index) }
-    return $rest
 }
 
 # ==================== 检查函数(Task 2-5 追加) ====================
@@ -230,68 +219,11 @@ function Invoke-Check3 {
     }
 }
 
-function Invoke-Check4 {
-    $typeEnum = @("任务跨会话", "专业判断", "新排查要点", "安之的纠正", "监管新动向")
-
-    # 海马体: 五类+出口结构(设计: spec D4)
-    $hipPath = Join-Path $Root "memory\海马体.md"
-    if (-not (Test-Path $hipPath)) { Add-Red "检查4: memory\海马体.md 不存在" }
-    else {
-        $sec = Get-Section (Read-Utf8 $hipPath) "## 待处理条目"
-        if ($null -eq $sec) { Add-Red "检查4[海马体]: 「## 待处理条目」节未找到(标题被改动? 改标题须同步本脚本)" }
-        else {
-            foreach ($line in ($sec -split "`n")) {
-                $cells = Split-TableRow $line
-                if ($null -eq $cells -or $cells.Count -lt 2) { continue }
-                if ($cells[0] -eq "条目") { continue }
-                $label = $cells[0] -replace '\*', ''
-                if ($label.Length -gt 18) { $label = $label.Substring(0, 18) + "…" }
-                if ($cells.Count -ne 4) { Add-Red "检查4[海马体]: 「$label」列数 $($cells.Count) != 4(条目/类型/出口/来源)"; continue }
-                if ($cells[0] -match '✅') { Add-Red "检查4[海马体]: 「$label」含 ✅ 完结标记残留——完结当场删不过夜, 按三分流提炼归档后删条" }
-                $typeOk = $false
-                foreach ($t in $typeEnum) { if ($cells[1] -match [regex]::Escape($t)) { $typeOk = $true } }
-                if (-not $typeOk) { Add-Red "检查4[海马体]: 「$label」类型「$($cells[1])」不在五类之内——当场分诊, 不许自由堆放" }
-                if (-not $cells[2] -or $cells[2] -eq "-") { Add-Red "检查4[海马体]: 「$label」出口列为空——每条必填出口, 没有出口的进 backlog 或删" }
-                $dates = Get-Dates $cells[3]
-                if ($dates.Count -eq 0) { Add-Yellow "检查4[海马体]: 「$label」来源列无日期, 无法判龄" }
-                else {
-                    $age = ($script:TodayDate - ($dates | Sort-Object | Select-Object -Last 1)).Days
-                    if ($age -gt 30) { Add-Yellow "检查4[海马体]: 「$label」已滞留 $age 天(>30)——确认出口是否仍成立, 或分诊 backlog" }
-                }
-            }
-        }
-    }
-
-    # backlog: 到期日扫描(健检之外的第二层触发, 设计: spec D5)
-    $bkPath = Join-Path $Root "memory\backlog.md"
-    if (-not (Test-Path $bkPath)) { Add-Red "检查4: memory\backlog.md 不存在" }
-    else {
-        $sec = Get-Section (Read-Utf8 $bkPath) "## 挂账清单"
-        if ($null -eq $sec) { Add-Red "检查4[backlog]: 「## 挂账清单」节未找到(标题被改动? 改标题须同步本脚本)" }
-        else {
-            foreach ($line in ($sec -split "`n")) {
-                $cells = Split-TableRow $line
-                if ($null -eq $cells -or $cells.Count -lt 4) { continue }
-                if ($cells[0] -eq "#") { continue }
-                if ($cells.Count -ne 5) { Add-Red "检查4[backlog]: 「$($cells[1])」列数 $($cells.Count) != 5(#/事项/背景/到期日/来源)"; continue }
-                $due = $cells[3]
-                if ($due -eq "-" -or -not $due) { continue }
-                $dates = Get-Dates $due
-                if ($dates.Count -eq 0) { Add-Yellow "检查4[backlog]: 「$($cells[1])」到期日列有内容但无法解析日期: $due"; continue }
-                $days = ($dates[0] - $script:TodayDate).Days
-                if ($days -lt 0) { Add-Red "检查4[backlog]: 「$($cells[1])」到期日 $($dates[0].ToString('yyyy-MM-dd')) 已过期 $(-$days) 天——处置后更新或移除标记" }
-                elseif ($days -le 45) { Add-Yellow "检查4[backlog]: 「$($cells[1])」$days 天后到期($($dates[0].ToString('yyyy-MM-dd')))" }
-            }
-        }
-    }
-}
-
 # ==================== 主流程(Task 2-5 追加调用) ====================
 
 Invoke-Check1
 Invoke-Check2
 Invoke-Check3
-Invoke-Check4
 
 # ==================== 汇总 ====================
 

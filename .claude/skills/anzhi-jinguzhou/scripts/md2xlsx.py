@@ -44,7 +44,7 @@ def fit_height(texts, widths, size=10.5):
         for seg in str(t).split('\n'):
             n += max(1, ceil(vlen(seg) / eff))
         lines = max(lines, n)
-    return lines * (size + 3.5) + 4
+    return min(lines * (size + 3.5) + 4, 380)
 
 
 def write_table(ws, rows, row0=1, widths=None, center_cols=()):
@@ -129,6 +129,12 @@ def convert_03():
     lines = (BATCH / '03-体检报告.md').read_text(encoding='utf-8').splitlines()
     wb = Workbook()
 
+    def sec(title):
+        return lines.index(title) if title in lines else None
+
+    sec7 = sec('## 七、标注结论与质检结论差异核对')
+    end6 = sec7 if sec7 is not None else len(lines)
+
     # ---- Sheet 总览 ----
     ws = wb.active
     ws.title = '总览'
@@ -192,6 +198,7 @@ def convert_03():
     all_rows = [header]
     sec3 = lines.index('## 三、七维明细')
     sec4 = lines.index('## 四、语音盲区清单（待人工抽听）')
+    sec5 = lines.index('## 五、待人工确认项')  # 供语音盲区上界与待人工确认段两处复用
     dim = None
     x = sec3
     while x < sec4:
@@ -214,22 +221,29 @@ def convert_03():
     # ---- Sheet 语音盲区 ----
     ws3 = wb.create_sheet('语音盲区待抽听')
     W3 = [10, 18, 45, 60]
-    k = next(x for x in range(sec4, len(lines)) if lines[x].strip().startswith('| 行号'))
-    rows, k = parse_table(lines, k)
-    end = write_table(ws3, rows, 1, widths=W3, center_cols=(0,))
-    for l in lines[k:]:
-        if l.startswith('## '):
-            break
-        if l.strip().startswith('注：'):
-            add_merged(ws3, end + 1, l.strip(), 4)
-    ws3.freeze_panes = 'A2'
+    k = next((x for x in range(sec4, sec5) if lines[x].strip().startswith('| 行号')), None)
+    if k is None:      # 无待抽听表：只写一行说明，不留空 sheet
+        set_widths(ws3, W3)
+        note = next((l.strip() for l in lines[sec4 + 1:sec5]
+                     if l.strip() and not l.startswith('### ')), '无待抽听项')
+        add_merged(ws3, 1, note, 4)
+    else:
+        rows, k = parse_table(lines, k)
+        end = write_table(ws3, rows, 1, widths=W3, center_cols=(0,))
+        for l in lines[k:]:
+            if l.startswith('## '):
+                break
+            if l.strip().startswith('注：'):
+                add_merged(ws3, end + 1, l.strip(), 4)
+        ws3.freeze_panes = 'A2'
 
     # ---- Sheet 待人工确认 ----
     ws4 = wb.create_sheet('待人工确认')
-    sec5 = lines.index('## 五、待人工确认项')
     sec6 = lines.index('## 六、沉淀建议')
     rows = [['#', '事项']]
     for l in lines[sec5 + 1:sec6]:
+        if l.startswith('### '):      # 抽检建议等三级小节及其后内容不进本 sheet
+            break
         m = re.match(r'(\d+)\.\s+(.*)', l.strip())
         if m:
             rows.append([m.group(1), re.sub(r'\*\*', '', m.group(2))])
@@ -238,7 +252,7 @@ def convert_03():
     # ---- Sheet 沉淀建议 ----
     ws5 = wb.create_sheet('沉淀建议')
     rows = [['#', '建议']]
-    for l in lines[sec6 + 1:]:
+    for l in lines[sec6 + 1:end6]:
         m = re.match(r'(\d+)\.\s+(.*)', l.strip())
         if m:
             rows.append([m.group(1), re.sub(r'\*\*', '', m.group(2))])
@@ -246,6 +260,24 @@ def convert_03():
     s1, s2 = signoff(lines)
     end = add_merged(ws5, end + 1, s1, 2, align='right')
     add_merged(ws5, end, s2, 2, align='right')
+
+    # ---- Sheet 差异核对（03 无第七节的老批次兼容跳过）----
+    if sec7 is not None:
+        ws6 = wb.create_sheet('差异核对')
+        W6 = [10, 30, 30, 22, 45]
+        try:
+            k = next(x for x in range(sec7, len(lines))
+                     if lines[x].strip().startswith('| 行号'))
+            rows, _ = parse_table(lines, k)
+            write_table(ws6, rows, 1, widths=W6, center_cols=(0,))
+            ws6.freeze_panes = 'A2'
+        except StopIteration:      # 零差异批次：只有说明行
+            set_widths(ws6, W6)
+            nonblank = [i for i, l in enumerate(lines) if l.strip()]
+            sig_start = nonblank[-2] if len(nonblank) >= 2 else len(lines)
+            note = next((l.strip() for l in lines[sec7 + 1:sig_start]
+                         if l.strip() and not l.startswith('## ')), '本批无实质差异')
+            add_merged(ws6, 1, note, 5)
 
     out = BATCH / '03-体检报告.xlsx'
     wb.save(out)
